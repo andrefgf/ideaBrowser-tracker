@@ -1,28 +1,43 @@
 export function analyzeTextQuality(text: string) {
-  const metrics = {
-    length: text.length,
-    lineCount: text.split('\n').length,
-    wordCount: text.split(/\s+/).filter(Boolean).length,
-    readabilityScore: 0,
-    uniqueWords: new Set<string>(),
-  };
-
-  // Calculate readability (simple version)
-  const sentences = text.split(/[.!?]+/).filter(Boolean);
-  const words = text.split(/\s+/).filter(Boolean);
-  
-  if (sentences.length > 0 && words.length > 0) {
-    const wordsPerSentence = words.length / sentences.length;
-    const syllables = words.join('').length / words.length; // Approximation
-    metrics.readabilityScore = 206.835 - (1.015 * wordsPerSentence) - (84.6 * syllables);
+  if (!text || text.trim().length === 0) {
+    return {
+      uniqueWordCount: 0,
+      uniqueWords: [],
+      length: 0,
+      lineCount: 0,
+      wordCount: 0,
+      readabilityScore: 0,
+    };
   }
 
-  // Count unique words
-  words.forEach(word => metrics.uniqueWords.add(word.toLowerCase()));
+  // Basic metrics
+  const length = text.length;
+  const words = text.match(/\b\w+\b/g) || [];
+  const wordCount = words.length;
+  const uniqueWords = [...new Set(words.map(word => word.toLowerCase()))];
+  const uniqueWordCount = uniqueWords.length;
+  const lineCount = (text.match(/\n/g) || []).length + 1;
+
+  // Enhanced readability score calculation
+  const avgWordLength = words.reduce((sum, word) => sum + word.length, 0) / wordCount;
+  const uniqueWordRatio = uniqueWordCount / wordCount;
+  
+  // Calculate readability score (0-10 scale)
+  let readabilityScore = Math.min(10, 
+    (uniqueWordRatio * 5) + // Vocabulary diversity
+    (Math.min(avgWordLength, 8) / 8 * 3) + // Word complexity
+    (Math.min(wordCount, 200) / 200 * 2)   // Content volume
+  );
+
+  // Round to 1 decimal place
+  readabilityScore = Math.round(readabilityScore * 10) / 10;
 
   return {
-    ...metrics,
-    uniqueWordCount: metrics.uniqueWords.size,
-    uniqueWords: Array.from(metrics.uniqueWords).slice(0, 50) // First 50 unique words
+    uniqueWordCount,
+    uniqueWords,
+    length,
+    lineCount,
+    wordCount,
+    readabilityScore,
   };
 }
