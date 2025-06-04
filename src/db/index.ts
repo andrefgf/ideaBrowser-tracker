@@ -1,13 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-export async function storeSnapshot(data: {
-  url: string;
+type SnapshotData = {
+  source_url: string;
   content: string;
-  screenshot_data: Buffer;
-}) {
+  captured_at: string;
+};
+
+export async function storeSnapshot(data: SnapshotData) {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_KEY) {
-    console.log('Supabase credentials missing. Skipping database storage.');
-    return;
+    console.error('Supabase credentials missing. Skipping database storage.');
+    return false;
   }
 
   const supabase = createClient(
@@ -15,16 +17,48 @@ export async function storeSnapshot(data: {
     process.env.SUPABASE_KEY
   );
 
-  const { error } = await supabase
-    .from('idea_snapshots')
-    .insert([
-      {
-        url: data.url,
-        content: data.content,
-        screenshot_data: data.screenshot_data
-      }
-    ]);
+  try {
+    const { error } = await supabase
+      .from('captured_ideas')
+      .insert([
+        {
+          source_url: data.source_url,
+          content: data.content,
+          captured_at: data.captured_at
+        }
+      ]);
 
-  if (error) throw error;
-  return true;
+    if (error) {
+      // Handle potential undefined error message
+      const errorMessage = error.message || JSON.stringify(error);
+      console.error('Supabase storage error:', errorMessage);
+      return false;
+    }
+    
+    console.log('Snapshot stored successfully');
+    return true;
+  } catch (e) {
+    // Handle unexpected errors
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error('Unexpected error in storeSnapshot:', errorMessage);
+    return false;
+  }
+}
+
+export async function testSupabaseConnection() {
+  const supabase = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_KEY!
+  );
+  
+  const { data, error } = await supabase
+    .from('captured_ideas')
+    .select('*')
+    .limit(1);
+  
+  if (error) {
+    console.error('Supabase connection test failed:', error);
+  } else {
+    console.log('Supabase connection successful. Found', data?.length, 'records');
+  }
 }
