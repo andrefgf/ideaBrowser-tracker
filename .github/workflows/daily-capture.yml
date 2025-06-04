@@ -12,6 +12,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Playwright dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-1 \
+            libgraphene-1.0-0 \
+            libwoff1 \
+            libvpx9 \
+            libevent-2.1-7 \
+            libopus0 \
+            libavif16 \
+            libsecret-1-0 \
+            libharfbuzz-icu0 \
+            libhyphen0 \
+            libmanette-0.2-0 \
+            libGLESv2-2 \
+            libx264-163 \
+            libgstallocators-1.0-0 \
+            libgstapp-1.0-0 \
+            libgstpbutils-1.0-0 \
+            libgstaudio-1.0-0 \
+            libgsttag-1.0-0 \
+            libgstvideo-1.0-0 \
+            libgstgl-1.0-0 \
+            libgstcodecparsers-1.0-0 \
+            libgstfft-1.0-0 \
+            flite1 \
+            libflite1 \
+            libflite-alsa \
+            libflite-cmu-grapheme-lex \
+            libflite-cmu-indic-lex \
+            libflite-cmu-time-awb \
+            libflite-cmu-us-awb \
+            libflite-cmu-us-kal \
+            libflite-cmu-us-rms \
+            libflite-cmu-us-slt
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -20,7 +57,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright
+      - name: Install Playwright browsers
         run: npx playwright install
 
       - name: Run capture script
