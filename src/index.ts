@@ -1,16 +1,19 @@
 import { chromium } from 'playwright';
-import { extractTextFromImageBuffer } from './ocr';
-import { storeSnapshot } from './db';
+import { storeSnapshot, testSupabaseConnection } from './db'; // Added test function
 import { TARGET_URL } from './utils/constants';
 import { analyzeTextQuality } from './utils/textAnalysis';
 import { cleanTextWithAI } from './utils/textCleaning';
 import 'dotenv/config';
 
-// Extract visible text directly from the page
 async function extractPageText(page: any): Promise<string> {
   try {
-    const directText = await page.locator('body').innerText();
-    return directText;
+    const contentSelector = '.main-content, main, .content, .article, .post, body';
+    const contentElement = page.locator(contentSelector).first();
+    
+    if (await contentElement.count() > 0) {
+      return await contentElement.innerText();
+    }
+    return await page.locator('body').innerText();
   } catch (error) {
     console.error('Error extracting direct text:', error);
     return '';
@@ -21,56 +24,51 @@ async function captureIdeaBrowser() {
   const browser = await chromium.launch();
   const page = await browser.newPage();
 
-  // Navigate to target URL
-  await page.goto(TARGET_URL, { waitUntil: 'networkidle' });
+  try {
+    // Test database connection first
+    await testSupabaseConnection();
+    
+    await page.goto(TARGET_URL, { 
+      waitUntil: 'domcontentloaded',
+      timeout: 60000 // Increased timeout
+    });
 
-  // Capture screenshot directly to buffer
-  const screenshotBuffer = await page.screenshot({ fullPage: true });
-  console.log('Screenshot captured in memory.');
+    const pageText = await extractPageText(page);
+    console.log(`Extracted ${pageText.length} characters of text.`);
 
-  // Parallel extraction: direct text + OCR (now using buffer input)
-  const [directText, ocrText] = await Promise.all([
-    extractPageText(page),
-    extractTextFromImageBuffer(screenshotBuffer)
-  ]);
-
-  // Combine both, prioritizing direct text
-  const combinedText = directText || ocrText;
-
-  // Text quality analysis
-  const directAnalysis = analyzeTextQuality(directText);
-  const ocrAnalysis = analyzeTextQuality(ocrText);
-
-  // Calculate similarity score
-  let similarityScore = 0;
-  if (directText && ocrText) {
-    const minLen = Math.min(directText.length, ocrText.length);
-    let commonChars = 0;
-    for (let i = 0; i < minLen; i++) {
-      if (directText[i] === ocrText[i]) commonChars++;
+    // Handle empty content case
+    if (!pageText || pageText.trim().length === 0) {
+      throw new Error('No text content extracted from page');
     }
-    similarityScore = commonChars / Math.max(directText.length, ocrText.length);
+
+    const textAnalysis = analyzeTextQuality(pageText);
+    console.log(`Text quality score: ${textAnalysis.readabilityScore.toFixed(1)}/10`);
+    console.log(`Unique words: ${textAnalysis.uniqueWordCount}`);
+
+    const cleanedText = await cleanTextWithAI(pageText);
+    console.log(`Cleaned text length: ${cleanedText.length} characters`);
+
+    // Store with proper field names
+    const storageResult = await storeSnapshot({
+      source_url: TARGET_URL,
+      content: cleanedText,
+      captured_at: new Date().toISOString()
+    });
+
+    if (!storageResult) {
+      console.error('Failed to store snapshot in database');
+    } else {
+      console.log(`\nSnapshot captured and stored for: ${TARGET_URL}`);
+    }
+  } catch (error) {
+    console.error('Error during capture process:', error);
+  } finally {
+    await browser.close();
+    console.log('Browser closed');
   }
-
-  // Optional: AI text cleaning
-  const cleanedText = await cleanTextWithAI(combinedText);
-
-  // Store final snapshot in DB (store cleaned text and screenshot buffer)
-  await storeSnapshot({
-    url: TARGET_URL,
-    content: cleanedText,
-    screenshot_data: screenshotBuffer
-  });
-
-  console.log('\n===== FINAL SUMMARY =====');
-  console.log(`Direct text length: ${directText.length} characters`);
-  console.log(`OCR text length: ${ocrText.length} characters`);
-  console.log(`Combined text length: ${combinedText.length} characters`);
-  console.log(`Cleaned text length: ${cleanedText.length} characters`);
-  console.log(`Similarity: ${(similarityScore * 100).toFixed(1)}%`);
-  console.log(`\nSnapshot captured and stored in Supabase for: ${TARGET_URL}`);
-
-  await browser.close();
 }
 
-captureIdeaBrowser().catch(console.error);
+// Add top-level error handling
+captureIdeaBrowser()
+  .then(() => console.log('Capture process completed'))
+  .catch(error => console.error('Unhandled error in capture process:', error));
