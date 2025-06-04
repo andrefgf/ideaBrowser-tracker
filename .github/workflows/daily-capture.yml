@@ -20,8 +20,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Browsers and Dependencies
-        run: microsoft/playwright-github-action@v1
+      - name: Install Playwright browsers and dependencies
+        uses: microsoft/playwright-github-action@v1
 
       - name: Run capture script
         env:
